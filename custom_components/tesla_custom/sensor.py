@@ -9,6 +9,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    CURRENCY_CENT,
     PERCENTAGE,
     UnitOfEnergy,
     UnitOfLength,
@@ -30,6 +31,7 @@ from teslajsonpy.energy import EnergySite
 from . import TeslaDataUpdateCoordinator
 from .base import TeslaCarEntity, TeslaEnergyEntity
 from .const import DISTANCE_UNITS_KM_HR, DOMAIN
+from .tariffs import TariffParser
 
 SOLAR_SITE_SENSORS = ["solar power", "grid power", "load power"]
 BATTERY_SITE_SENSORS = SOLAR_SITE_SENSORS + ["battery power"]
@@ -99,6 +101,26 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
                 entities.append(
                     TeslaEnergyPowerSensor(energysite, coordinator, sensor_type)
                 )
+
+        # pylint: disable=protected-access
+        if tariff_content := energysite._site_config.get("tariff_content"):
+            buy_tariffs = TariffParser(tariff_content)
+            entities.append(
+                TeslaEnergyTariffBuyRate(energysite, coordinator, buy_tariffs)
+            )
+            entities.append(
+                TeslaEnergyTariffBuyPeriodDuration(energysite, coordinator, buy_tariffs)
+            )
+
+            sell_tariffs = buy_tariffs.for_selling()
+            entities.append(
+                TeslaEnergyTariffSellRate(energysite, coordinator, sell_tariffs)
+            )
+            entities.append(
+                TeslaEnergyTariffSellPeriodDuration(
+                    energysite, coordinator, sell_tariffs
+                )
+            )
 
     async_add_entities(entities, update_before_add=True)
 
@@ -429,6 +451,97 @@ class TeslaEnergyBattery(TeslaEnergyEntity, SensorEntity):
         return icon_for_battery_level(
             battery_level=self.native_value, charging=charging
         )
+
+
+class _TeslaEnergyTariffEntity(TeslaEnergyEntity):
+    """Base class for Tesla energy tariff entities."""
+
+    def __init__(
+        self,
+        energysite: EnergySite,
+        coordinator: TeslaDataUpdateCoordinator,
+        tariff_parser: TariffParser,
+    ) -> None:
+        """Initialize tariff related sensor."""
+        self.tariffs = tariff_parser
+        super().__init__(energysite, coordinator)
+
+
+class _TeslaEnergyTariffRateEntity(_TeslaEnergyTariffEntity):
+    """Current rate for grid power consumption."""
+
+    _attr_icon = "mdi:currency-usd"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = CURRENCY_CENT
+
+    @property
+    def native_value(self) -> float:
+        """Return current cost per kwh."""
+        attrs = self.extra_state_attributes
+        rate = self.tariffs.get_rate(attrs["Season"], attrs["TOU Period"])
+        return rate * 100
+
+    @property
+    def extra_state_attributes(self):
+        when = dt.now()
+        season = self.tariffs.season(when)
+        period_name, _ = self.tariffs.get_period(season, when)
+        period_end = self.tariffs.get_period_end(when, season)
+        next_season, next_period, next_rate = self.tariffs.find(
+            period_end + timedelta(seconds=1)
+        )
+        return {
+            "Season": season,
+            "TOU Period": period_name,
+            "Period End Timestamp": int(period_end.timestamp()),
+            "Next Rate": next_rate * 100,
+            "Next Season": next_season,
+            "Next TOU Period": next_period,
+        }
+
+
+class TeslaEnergyTariffBuyRate(_TeslaEnergyTariffRateEntity, SensorEntity):
+    """Current rate for grid power consumption."""
+
+    type = "tariff buy rate"
+
+
+class TeslaEnergyTariffSellRate(_TeslaEnergyTariffRateEntity, SensorEntity):
+    """Current rate for grid power consumption."""
+
+    type = "tariff sell rate"
+
+
+class _TeslaEnergyTariffPeriodDurationEntity(_TeslaEnergyTariffEntity):
+    """Remaining duration of the current tariff period."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:timer-sand-complete"
+
+    @property
+    def native_value(self) -> Optional[datetime]:
+        """Return current cost per kwh."""
+        when = dt.now()
+        season = self.tariffs.season(when)
+        period_end = self.tariffs.get_period_end(when, season)
+        return period_end
+
+
+class TeslaEnergyTariffBuyPeriodDuration(
+    _TeslaEnergyTariffPeriodDurationEntity, SensorEntity
+):
+    """Remaining duration of the current buy tariff period."""
+
+    type = "time tariff buy rate end"
+
+
+class TeslaEnergyTariffSellPeriodDuration(
+    _TeslaEnergyTariffPeriodDurationEntity, SensorEntity
+):
+    """Remaining duration of the current sell tariff period."""
+
+    type = "time tariff sell rate end"
 
 
 class TeslaEnergyBatteryRemaining(TeslaEnergyEntity, SensorEntity):
