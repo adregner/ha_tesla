@@ -2,7 +2,7 @@
   "domain": "tesla_custom",
   "name": "Tesla Custom Integration",
   "after_dependencies": ["mqtt"],
-  "codeowners": ["@alandtse"],
+  "codeowners": ["@alandtse", "@adregner"],
   "config_flow": true,
   "dependencies": ["http"],
   "dhcp": [
@@ -25,5 +25,5 @@
   "issue_tracker": "https://github.com/alandtse/tesla/issues",
   "loggers": ["teslajsonpy"],
   "requirements": ["teslajsonpy==3.13.2"],
-  "version": "3.25.3"
+  "version": "3.25.3-ahome1"
 }
