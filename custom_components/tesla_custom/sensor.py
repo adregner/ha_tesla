@@ -492,7 +492,6 @@ class _TeslaEnergyTariffEntity(TeslaEnergyEntity):
 class _TeslaEnergyTariffRateEntity(_TeslaEnergyTariffEntity):
     """Current rate for grid power consumption."""
 
-    _attr_icon = "mdi:currency-usd"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = CURRENCY_CENT
@@ -527,19 +526,20 @@ class TeslaEnergyTariffBuyRate(_TeslaEnergyTariffRateEntity, SensorEntity):
     """Current rate for grid power consumption."""
 
     type = "tariff buy rate"
+    _attr_icon = "mdi:currency-usd"
 
 
 class TeslaEnergyTariffSellRate(_TeslaEnergyTariffRateEntity, SensorEntity):
     """Current rate for grid power consumption."""
 
     type = "tariff sell rate"
+    _attr_icon = "mdi:cash-fast"
 
 
 class _TeslaEnergyTariffPeriodDurationEntity(_TeslaEnergyTariffEntity):
     """Remaining duration of the current tariff period."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_icon = "mdi:timer-sand-complete"
 
     @property
     def native_value(self) -> Optional[datetime]:
@@ -556,6 +556,7 @@ class TeslaEnergyTariffBuyPeriodDuration(
     """Remaining duration of the current buy tariff period."""
 
     type = "time tariff buy rate end"
+    _attr_icon = "mdi:timer-sand"
 
 
 class TeslaEnergyTariffSellPeriodDuration(
@@ -564,6 +565,7 @@ class TeslaEnergyTariffSellPeriodDuration(
     """Remaining duration of the current sell tariff period."""
 
     type = "time tariff sell rate end"
+    _attr_icon = "mdi:timer-sand-complete"
 
 
 class TeslaEnergyBatteryRemaining(TeslaEnergyEntity, SensorEntity):
