@@ -121,6 +121,9 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
                     energysite, coordinator, sell_tariffs
                 )
             )
+            entities.append(
+                TeslaEnergyTariffSellPeekRate(energysite, coordinator, sell_tariffs)
+            )
 
     async_add_entities(entities, update_before_add=True)
 
@@ -471,7 +474,7 @@ class _TeslaEnergyTariffRateEntity(_TeslaEnergyTariffEntity):
     """Current rate for grid power consumption."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_native_unit_of_measurement = CURRENCY_CENT
 
     @property
@@ -508,7 +511,7 @@ class TeslaEnergyTariffBuyRate(_TeslaEnergyTariffRateEntity, SensorEntity):
 
 
 class TeslaEnergyTariffSellRate(_TeslaEnergyTariffRateEntity, SensorEntity):
-    """Current rate for grid power consumption."""
+    """Current rate for grid power generation."""
 
     type = "tariff sell rate"
     _attr_icon = "mdi:cash-fast"
@@ -544,6 +547,42 @@ class TeslaEnergyTariffSellPeriodDuration(
 
     type = "time tariff sell rate end"
     _attr_icon = "mdi:timer-sand-complete"
+
+
+class _TeslaEnergyTariffPeekEntity(_TeslaEnergyTariffEntity):
+    """Peek tariff rate for the next configured duration."""
+
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_native_unit_of_measurement = CURRENCY_CENT
+
+    @property
+    def native_value(self) -> float:
+        """Return peek rate per kwh."""
+        return self._get_highest()[2] * 100
+
+    def _get_highest(self):
+        when = dt.now()
+        name, period, rate = self.tariffs.get_highest_period(
+            when, self.coordinator.config_get_tariff_lookahead
+        )
+        return name, period, rate, when
+
+    @property
+    def extra_state_attributes(self):
+        period_name, period, _, when = self._get_highest()
+        return {
+            "Period": period_name,
+            "Start Time": period.start_time_on(when),
+            "End Time": period.end_time_on(when),
+        }
+
+
+class TeslaEnergyTariffSellPeekRate(_TeslaEnergyTariffPeekEntity, SensorEntity):
+    """Upcoming peek sell rate for configured period."""
+
+    type = "peek tariff sell rate"
+    _attr_icon = "mdi:cash-fast"
 
 
 class TeslaEnergyBatteryRemaining(TeslaEnergyEntity, SensorEntity):
