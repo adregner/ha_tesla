@@ -26,7 +26,7 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.httpx_client import SERVER_SOFTWARE, USER_AGENT
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 import httpx
-from teslajsonpy import Controller as TeslaAPI
+from teslajsonpy import Controller as TeslaAPI, EnergySite
 from teslajsonpy.const import AUTH_DOMAIN
 from teslajsonpy.exceptions import IncompleteCredentials, TeslaException
 
@@ -40,11 +40,13 @@ from .const import (
     CONF_INCLUDE_VEHICLES,
     CONF_POLLING_POLICY,
     CONF_WAKE_ON_START,
+    CONF_TARIFF_LOOKAHEAD,
     DATA_LISTENER,
     DEFAULT_ENABLE_TESLAMATE,
     DEFAULT_POLLING_POLICY,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_WAKE_ON_START,
+    DEFAULT_TARIFF_LOOKAHEAD,
     DOMAIN,
     MIN_SCAN_INTERVAL,
     PLATFORMS,
@@ -90,6 +92,7 @@ async def async_setup(hass, base_config):
             CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
             CONF_WAKE_ON_START: DEFAULT_WAKE_ON_START,
             CONF_POLLING_POLICY: DEFAULT_POLLING_POLICY,
+            CONF_TARIFF_LOOKAHEAD: DEFAULT_TARIFF_LOOKAHEAD,
         }
         for entry in hass.config_entries.async_entries(DOMAIN):
             if email != entry.title:
@@ -312,6 +315,20 @@ async def async_setup_entry(hass, config_entry):
     }
     car_coordinators = {vin: _partial_coordinator(vin=vin) for vin in cars}
     coordinators = {**energy_coordinators, **car_coordinators}
+
+    @callback
+    def _async_updated_energysite(energysite: EnergySite):
+        pass
+
+    for energy_site_id, energy_coordinator in energy_coordinators.items():
+
+        energysite = energysites[energy_site_id]
+        energy_coordinator.async_add_listener(
+            partial(
+                _async_updated_energysite,
+                energysite,
+            )
+        )
 
     if car_coordinators:
         update_vehicles_coordinator = _partial_coordinator(update_vehicles=True)
@@ -586,3 +603,10 @@ class TeslaDataUpdateCoordinator(DataUpdateCoordinator):
                 partial(self._async_debounced, max_delay),
             )
             _LOGGER.debug("Max delay not reached, scheduling another debounce task")
+
+    @property
+    def config_get_tariff_lookahead(self) -> timedelta:
+        hours = self.config_entry.options.get(
+            CONF_TARIFF_LOOKAHEAD, DEFAULT_TARIFF_LOOKAHEAD
+        )
+        return timedelta(hours=hours)
