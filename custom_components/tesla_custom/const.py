@@ -10,14 +10,17 @@ CONF_ENABLE_TESLAMATE = "enable_teslamate"
 CONF_API_PROXY_ENABLE = "api_proxy_enable"
 CONF_API_PROXY_URL = "api_proxy_url"
 CONF_API_PROXY_CERT = "api_proxy_cert"
+CONF_TARIFF_LOOKAHEAD = "tariff_lookahead_hours"
 DOMAIN = "tesla_custom"
 ATTRIBUTION = "Data provided by Tesla"
 DATA_LISTENER = "listener"
 DEFAULT_SCAN_INTERVAL = 660
+DEFAULT_TARIFF_LOOKAHEAD = 8
 DEFAULT_WAKE_ON_START = False
 DEFAULT_ENABLE_TESLAMATE = False
 ERROR_URL_NOT_DETECTED = "url_not_detected"
 MIN_SCAN_INTERVAL = 10
+MAX_TARIFF_LOOKAHEAD = 24 * 7
 
 PLATFORMS = [
     "sensor",

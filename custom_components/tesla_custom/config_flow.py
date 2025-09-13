@@ -36,12 +36,15 @@ from .const import (
     CONF_INCLUDE_VEHICLES,
     CONF_POLLING_POLICY,
     CONF_WAKE_ON_START,
+    CONF_TARIFF_LOOKAHEAD,
     DEFAULT_ENABLE_TESLAMATE,
     DEFAULT_POLLING_POLICY,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_WAKE_ON_START,
+    DEFAULT_TARIFF_LOOKAHEAD,
     DOMAIN,
     MIN_SCAN_INTERVAL,
+    MAX_TARIFF_LOOKAHEAD,
 )
 from .util import create_tesla_ssl_context
 
@@ -237,6 +240,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         CONF_ENABLE_TESLAMATE, DEFAULT_ENABLE_TESLAMATE
                     ),
                 ): bool,
+                vol.Optional(
+                    CONF_TARIFF_LOOKAHEAD,
+                    default=self.config_entry.options.get(
+                        CONF_TARIFF_LOOKAHEAD, DEFAULT_TARIFF_LOOKAHEAD
+                    ),
+                ): vol.All(cv.positive_int, vol.Clamp(max=MAX_TARIFF_LOOKAHEAD)),
             }
         )
         return self.async_show_form(step_id="init", data_schema=data_schema)
