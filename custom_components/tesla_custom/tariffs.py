@@ -11,7 +11,7 @@ try:
     from homeassistant.util import dt
 
     DEFAULT_TIMEZONE = dt.DEFAULT_TIME_ZONE
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     if __name__ != "__main__":
         raise
     import dateutil
@@ -80,12 +80,16 @@ class TariffParser:
         else:
             self.data = data  # type: ignore[assignment]
 
+        with open('/tmp/tesla_component_tariff_data.json', 'w') as fd:
+            json.dump(self.data, fd, indent=4)
+
     def season(self, when: datetime) -> SeasonName:
         """Returns the season for a given date."""
         for season_name, season in self.data["seasons"].items():
             # logger.warning("checking season %r: %r", season_name, season)
             start = day_in(when, season["fromMonth"], season["fromDay"])
             end = day_in(when, season["toMonth"], season["toDay"])
+            end = ensure_greater_year(end, start)
             if start <= when.date() < end:
                 return season_name
         logger.warning("No season found for date: %s", when)
@@ -228,6 +232,15 @@ def time_on(when: datetime, hour: int, minute: int) -> datetime:
     )
 
 
+def ensure_greater_year(value: date, reference: date) -> date:
+    """Ensures the given datetime is greater than the reference datetime.
+    If it is not, it will be adjusted to the next year."""
+    if value < reference:
+        # logger.warning("Ensuring greater: %r <= %r", value, reference)
+        return date(value.year + 1, value.month, value.day)
+    return value
+
+
 def ensure_greater(value: datetime, reference: datetime) -> datetime:
     """Ensures the given datetime is greater than the reference datetime.
     If it is not, it will be adjusted to the next day."""
@@ -244,27 +257,44 @@ if __name__ == "__main__":
     tp = TariffParser(inputdata)
     tps = tp.for_selling()
 
-    threshold = 0.55
+    for what, tariffs in [('selling', tps), ('buying', tp)]:
+        print()
+        print(what, tariffs)
+        when = datetime.now(tz=DEFAULT_TIMEZONE)
+        print(when)
+        season = tariffs.season(when)
+        print('season', season)
+        period_name, _ = tariffs.get_period(season, when)
+        print('period name', period_name)
+        period_end = tariffs.get_period_end(when, season)
+        print('period end', period_end)
+        next_season, next_period, next_rate = tariffs.find(
+            period_end + timedelta(seconds=1)
+        )
+        print('next')
+        print('season', next_season, 'period', next_period, 'rate', next_rate)
 
-    for mon in [5, 6, 7, 8, 9, 10]:
-        this_month = date(2025, mon, 1)
-        next_mon = (this_month + timedelta(days=32)).month
-        days = (date(2025, next_mon, 1) - this_month).days
-        for d in range(1, days + 1):
-            num_hours = 0
-            start_hour = None
-            rates = []
+    # threshold = 0.55
 
-            for h in range(24):
-                whenh = datetime(2025, mon, d, h, 1, 0, tzinfo=DEFAULT_TIMEZONE)
-                _, _, sellrate = tps.find(whenh)
-                if sellrate >= threshold:
-                    if start_hour is None:
-                        start_hour = h
-                    num_hours += 1
-                    rates.append(sellrate)
+    # for mon in [5, 6, 7, 8, 9, 10]:
+    #     this_month = date(2025, mon, 1)
+    #     next_mon = (this_month + timedelta(days=32)).month
+    #     days = (date(2025, next_mon, 1) - this_month).days
+    #     for d in range(1, days + 1):
+    #         num_hours = 0
+    #         start_hour = None
+    #         rates = []
 
-            if num_hours > 0:
-                print(
-                    f"2025-{mon}-{d} {start_hour}:00 +{num_hours}hr {",".join(map(str, rates))}"
-                )
+    #         for h in range(24):
+    #             whenh = datetime(2025, mon, d, h, 1, 0, tzinfo=DEFAULT_TIMEZONE)
+    #             _, _, sellrate = tps.find(whenh)
+    #             if sellrate >= threshold:
+    #                 if start_hour is None:
+    #                     start_hour = h
+    #                 num_hours += 1
+    #                 rates.append(sellrate)
+
+    #         if num_hours > 0:
+    #             print(
+    #                 f"2025-{mon}-{d} {start_hour}:00 +{num_hours}hr {",".join(map(str, rates))}"
+    #             )
