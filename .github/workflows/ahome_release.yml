@@ -1,0 +1,83 @@
+name: ahome_release
+
+# Publishes a fork release when the manifest version is bumped (e.g. 3.28.0-ahome1).
+# The release tag is the manifest version, the release has a single asset
+# `tesla_custom.zip` holding the contents of custom_components/tesla_custom at the
+# zip root (what hacs.json `zip_release` expects).
+
+on:
+  push:
+    paths:
+      - custom_components/tesla_custom/manifest.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read manifest version
+        id: manifest
+        run: |
+          version=$(jq -r .version custom_components/tesla_custom/manifest.json)
+          if ! [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-ahome[0-9]+$ ]]; then
+            echo "Version '$version' is not an upstream-version-ahomeN fork version; nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "upstream=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          if gh release view "$version" >/dev/null 2>&1 || git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
+            echo "Release or tag $version already exists; nothing to do."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Fetch upstream tag
+        if: steps.manifest.outputs.release == 'true'
+        run: |
+          git fetch --no-tags https://github.com/alandtse/tesla "refs/tags/v${{ steps.manifest.outputs.upstream }}:refs/tags/upstream-v${{ steps.manifest.outputs.upstream }}"
+
+      - name: Check this commit is based on the upstream release
+        if: steps.manifest.outputs.release == 'true'
+        run: |
+          git merge-base --is-ancestor "upstream-v${{ steps.manifest.outputs.upstream }}" HEAD \
+            || { echo "::error::HEAD is not rebased on upstream v${{ steps.manifest.outputs.upstream }}"; exit 1; }
+
+      - name: Build release notes
+        if: steps.manifest.outputs.release == 'true'
+        run: |
+          {
+            echo "Fork of [\`alandtse/tesla\`](https://github.com/alandtse/tesla) based on upstream \`${{ steps.manifest.outputs.upstream }}\`."
+            echo
+            echo "### Fork changes on top of upstream \`main\`"
+            git log --no-merges --format='- %s' "upstream-v${{ steps.manifest.outputs.upstream }}..HEAD"
+          } > release_notes.md
+          cat release_notes.md
+
+      - name: Build zip
+        if: steps.manifest.outputs.release == 'true'
+        run: |
+          find custom_components/tesla_custom -name __pycache__ -prune -exec rm -rf {} +
+          cd custom_components/tesla_custom
+          zip -r "$GITHUB_WORKSPACE/tesla_custom.zip" .
+
+      - name: Create release
+        if: steps.manifest.outputs.release == 'true'
+        run: |
+          gh release create "${{ steps.manifest.outputs.version }}" tesla_custom.zip \
+            --target "$GITHUB_SHA" \
+            --title "${{ steps.manifest.outputs.version }}" \
+            --notes-file release_notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
